@@ -1,6 +1,9 @@
 import argparse
 import multiprocessing
 import shutil
+import subprocess
+import sys
+from shutil import which
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -152,6 +155,11 @@ def main(
     image_list: Optional[List[str]] = None,
     image_options: Optional[Dict[str, Any]] = None,
     mapper_options: Optional[Dict[str, Any]] = None,
+    gps_priors: bool = False,
+    gps_priors_args: Optional[List[str]] = None,
+    gps_priors_origin: Optional[List[float]] = None,
+    gps_priors_origin_mode: Optional[str] = None,
+    gps_priors_image_dir: Optional[Path] = None,
 ) -> pycolmap.Reconstruction:
     assert features.exists(), features
     assert pairs.exists(), pairs
@@ -165,6 +173,35 @@ def main(
 
     create_empty_db(database)
     import_images(image_dir, database, camera_mode, image_list, image_options)
+    if gps_priors:
+        if which("exiftool") is None:
+            raise RuntimeError(
+                "gps_priors enabled but exiftool was not found in PATH. "
+                "Install exiftool or disable gps_priors."
+            )
+        script = Path(__file__).resolve().parents[1] / "scripts" / "colmap_import_gps_priors.py"
+        cmd = [
+            sys.executable,
+            str(script),
+            "--db",
+            str(database),
+            "--image_dir",
+            str(gps_priors_image_dir or image_dir),
+        ]
+        if gps_priors_args:
+            cmd += gps_priors_args
+        if gps_priors_origin:
+            cmd += ["--origin"] + [str(v) for v in gps_priors_origin]
+        if gps_priors_origin_mode:
+            cmd += ["--origin_mode", str(gps_priors_origin_mode)]
+        logger.info("Importing GPS priors into COLMAP database...")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.error("GPS priors import failed.")
+            logger.error(result.stderr.strip())
+            raise RuntimeError("GPS priors import failed.")
+        if result.stdout:
+            logger.info(result.stdout.strip())
     image_ids = get_image_ids(database)
     with pycolmap.Database.open(database) as db:
         import_features(image_ids, db, features)
@@ -222,6 +259,38 @@ if __name__ == "__main__":
             pycolmap.IncrementalMapperOptions().todict()
         ),
     )
+    parser.add_argument(
+        "--gps_priors",
+        action="store_true",
+        help="Import GPS priors into the COLMAP database using exiftool.",
+    )
+    parser.add_argument(
+        "--gps_priors_args",
+        nargs="*",
+        default=[],
+        help="Extra args forwarded to scripts/colmap_import_gps_priors.py",
+    )
+    parser.add_argument(
+        "--gps_priors_origin",
+        type=float,
+        nargs=3,
+        default=None,
+        metavar=("LAT", "LON", "ALT"),
+        help="Origin for GPS priors (degrees, degrees, meters).",
+    )
+    parser.add_argument(
+        "--gps_priors_origin_mode",
+        type=str,
+        choices=["first", "mean"],
+        default=None,
+        help="Origin mode for GPS priors if origin is not provided.",
+    )
+    parser.add_argument(
+        "--gps_priors_image_dir",
+        type=Path,
+        default=None,
+        help="Override image directory used for GPS EXIF parsing.",
+    )
     args = parser.parse_args().__dict__
 
     image_options = parse_option_args(
@@ -231,4 +300,8 @@ if __name__ == "__main__":
         args.pop("mapper_options"), pycolmap.IncrementalMapperOptions()
     )
 
-    main(**args, image_options=image_options, mapper_options=mapper_options)
+    main(
+        **args,
+        image_options=image_options,
+        mapper_options=mapper_options,
+    )
