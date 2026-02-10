@@ -2,7 +2,6 @@ import argparse
 import pickle
 from pathlib import Path
 
-import cv2
 import h5py
 import numpy as np
 import pycolmap
@@ -11,7 +10,7 @@ from scipy.io import loadmat
 from tqdm import tqdm
 
 from . import logger
-from .utils.io import write_poses
+from .utils.io import read_image, write_poses
 from .utils.parsers import names_to_pair, parse_retrieval
 
 
@@ -66,7 +65,7 @@ def get_scan_pose(dataset_dir, rpath):
 
 
 def pose_from_cluster(dataset_dir, q, retrieved, feature_file, match_file, skip=None):
-    height, width = cv2.imread(str(dataset_dir / q)).shape[:2]
+    height, width = read_image(dataset_dir / q).shape[:2]
     cx = 0.5 * width
     cy = 0.5 * height
     focal_length = 4032.0 * 28.0 / 36.0

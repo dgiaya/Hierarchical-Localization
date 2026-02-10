@@ -1,8 +1,8 @@
 import logging
 
-import cv2
 import numpy as np
 
+from hloc.utils.io import read_image
 from hloc.utils.read_write_model import (
     qvec2rotmat,
     read_cameras_binary,
@@ -27,7 +27,7 @@ def scale_sfm_images(full_model, scaled_model, image_dir):
     scaled_cameras = {}
     for id_, image in images.items():
         name = image.name
-        img = cv2.imread(str(image_dir / name))
+        img = read_image(image_dir / name)
         assert img is not None, image_dir / name
         h, w = img.shape[:2]
 
@@ -74,7 +74,7 @@ def create_query_list_with_intrinsics(
 
         if image_dir is not None:
             # Check the original image size and rescale the camera intrinsics
-            img = cv2.imread(str(image_dir / name))
+            img = read_image(image_dir / name)
             assert img is not None, image_dir / name
             h_orig, w_orig = img.shape[:2]
             assert camera.model == "SIMPLE_RADIAL"

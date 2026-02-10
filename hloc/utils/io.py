@@ -10,6 +10,31 @@ from .parsers import names_to_pair, names_to_pair_old
 
 
 def read_image(path, grayscale=False):
+    path = Path(path)
+    if path.suffix.lower() == ".dng":
+        try:
+            import rawpy
+        except ImportError as exc:
+            raise ValueError(
+                "Cannot read DNG image without rawpy. "
+                "Install it with `pip install rawpy`."
+            ) from exc
+        with rawpy.imread(str(path)) as raw:
+            image = raw.postprocess(
+                output_bps=8,
+                use_camera_wb=False,
+                use_auto_wb=True,
+                no_auto_bright=False,
+                gamma=(2.2, 4.5),
+                bright=1.0,
+                highlight_mode=rawpy.HighlightMode.ReconstructDefault,
+                demosaic_algorithm=rawpy.DemosaicAlgorithm.AHD,
+                output_color=rawpy.ColorSpace.sRGB,
+            )
+        if grayscale:
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        return image
+
     if grayscale:
         mode = cv2.IMREAD_GRAYSCALE
     else:
